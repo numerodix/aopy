@@ -1,0 +1,33 @@
+aopy - Aspect Oriented Programming framework for Python
+=======================================================
+
+aopy has three types of advice:
+* Properties
+* Decorators
+* Metaclasses
+
+To perform an instrumentation, you need a specfile describing the advice and
+the join points. Join points are written as paths into modules.
+
+A specfile looks like this:
+>>>
+import aopy
+import myaspects
+
+aspect = aopy.Aspect()
+aspect.add_decorator('dir/main:func', myaspects.mydecorator)
+aspect.add_metaclass('dir/main:Class', myaspects.MyMetaclass)
+
+__all__ = ['aspect']
+<<<
+
+To transform a module (or directory), run the aopy compiler to compile the
+module into bytecode (the source code is left untouched):
+
+$ aopyc -t spec.py main.py
+
+Then run the instrumented module:
+
+$ python main.pyc
+
+Find lots of examples of transformations under test/.

@@ -1,0 +1,43 @@
+#!/usr/bin/env python
+
+import imp
+import marshal
+import os.path
+import struct
+import sys
+
+def src(file):
+    return open(file, 'r').read()
+
+def pycheader(file):
+    mtime = os.path.getmtime(file)
+    mtime_st = struct.pack('<i', mtime)
+    magic = imp.get_magic()
+    return magic + mtime_st
+
+def write(file, code):
+    (root, ext) = os.path.splitext(file)
+    f = open(root + '.pyc', 'wb')
+    f.write(pycheader(file))
+    marshal.dump(code , f)
+    f.close()
+
+def comp(file):
+    s = src(file)
+    code = compile(s, file, 'exec')
+    write(file, code)
+
+def comp_ast(file):
+    s = src(file)
+    import ast
+    tree = ast.parse(s, filename=file, mode='exec')
+    code = compile(tree, file, 'exec')
+    write(file, code)
+
+
+if __name__ == "__main__":
+    try:
+        comp(sys.argv[1])
+        comp_ast(sys.argv[1])
+    except IndexError:
+        print("Usage:  %s module.py" % sys.argv[0])

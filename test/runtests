@@ -1,0 +1,149 @@
+#!/usr/bin/env python
+#
+# Author: Martin Matusiak <numerodix@gmail.com>
+# Licensed under the GNU Public License, version 3.
+#
+# Description: Run tests in test_* dirs
+# Locate SPECFILE, then locate all modules containing a TESTSPEC output
+
+import os
+import os.path
+import re
+import subprocess
+import sys
+
+
+AOPY_BIN = "aopyc"
+AOPY_PATH = os.path.abspath("..")
+TESTSPEC = "(?s).*### TESTSPEC ###\s*\"\"\"(?P<spec>.*)\"\"\""
+TESTDIR_PREFIX = "test"
+SPECFILE = "spec.py"
+VERBOSE = 0
+
+def debug(s):
+    if VERBOSE > 0:
+        print("Debug:  %s" % s)
+
+def warn(s):
+    print("Warn :  %s" % s)
+
+def prepend(prefix, s):
+    s = s.split("\n")
+    s = map(lambda x: "%s%s" % (prefix, x), s)
+    return "\n".join(s)
+
+def find_tests(path):
+    dirs = []
+    path = os.path.abspath(path)
+    for item in os.listdir(path):
+        dir = os.path.join(path, item)
+        if os.path.isdir(dir):
+            try:
+                (prefix, testname) = re.split("_", item, maxsplit=1)
+                if prefix == TESTDIR_PREFIX:
+                    if os.path.exists(os.path.join(dir, SPECFILE)):
+                        dirs.append(dir)
+                        debug("Found test %s" % testname)
+                    else:
+                        warn("Test %s missing %s" % (testname, SPECFILE))
+            except ValueError:
+                pass
+    return dirs
+
+def find_modules(dir):
+    modules = []
+    for finding in os.walk(dir):
+        (dir, dirs, files) = finding
+        for item in files:
+            file = os.path.join(dir, item)
+            if os.path.isfile(file):
+                (root, ext) = os.path.splitext(file)
+                if ext == ".py":
+                    modules.append(file)
+    return modules
+
+def find_code_modules(dir):
+    modules = find_modules(dir)
+    module_pairs = []
+    for file in modules:
+        s = open(file, 'r').read()
+        m = re.search(TESTSPEC, s)
+        if m:
+            spec = m.group("spec").strip()
+            module_pairs.append((file, spec))
+            debug("Found code module %s" % file)
+    return module_pairs
+
+def invoke(cwd, args):
+    popen = subprocess.Popen(args, cwd=cwd,
+                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    (out, _err) = popen.communicate()
+    out = str(out).strip()
+    return popen.returncode, out
+
+def compile(dir):
+    cwd = os.getcwd()
+    os.chdir(dir)
+    aopy = os.path.join(AOPY_PATH, AOPY_BIN)
+    (exit, output) = invoke(dir, [aopy, "-t", SPECFILE, "."])
+    output = prepend("aopy --  ", output)
+    if exit != 0 or VERBOSE > 1:
+        print(output)
+    os.chdir(cwd)
+
+def run_module(module):
+    dir = os.path.dirname(module)
+    file = os.path.basename(module)
+    (exit, output) = invoke(dir, ["python", file])
+    if exit != 0:
+        warn("Failed to run module standalone %s" % module)
+
+def run_test(dir, module_pair):
+    (file, testspec) = module_pair
+    (root, ext) = os.path.splitext(file)
+    runfile = root + ".pyc"
+
+    # allow for the possibility that the main module will not be instrumented,
+    # instead it imports submodules that will be. so there is no main.pyc
+    if not os.path.exists(runfile):
+        runfile = file
+
+    (exit, output) = invoke(dir, ["python", runfile])
+    if exit != 0:
+        warn(output)
+    elif output != testspec:
+        warn("Test FAILED on module %s" % file)
+        if VERBOSE > 1:
+            print(prepend("testspec ::  ", testspec))
+            print(prepend("actual   ::  ", output))
+    elif VERBOSE > 0:
+        debug("Test PASSED on module %s" % file)
+
+def run(path):
+    dirs = find_tests(path)
+    for dir in dirs:
+
+        # try to execute all modules standalone
+        # a module failing to run on its own is typically a sign of error
+        modules = find_modules(dir)
+        for module in modules:
+            run_module(module)
+
+        # run tests on code modules
+        module_pairs = find_code_modules(dir)
+        compile(dir)
+        for module_pair in module_pairs:
+            run_test(dir, module_pair)
+
+
+if __name__ == '__main__':
+    try:
+        if "-v" in sys.argv:
+            sys.argv.remove("-v")
+            VERBOSE = 1
+        if "-vv" in sys.argv:
+            sys.argv.remove("-vv")
+            VERBOSE = 2
+        run(sys.argv[1])
+    except IndexError:
+        print("Usage  %s <path> [-v|-vv]" % sys.argv[0])

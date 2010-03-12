@@ -1,0 +1,71 @@
+#!/usr/bin/env python
+#
+# Author: Martin Matusiak <numerodix@gmail.com>
+# Licensed under the GNU Public License, version 3.
+#
+# <desc> AOP framework for Python </desc>
+
+"""This module is the aspect compiler"""
+
+from modulecompiler import *
+
+
+def display(file):
+    """Parse a module, then pretty print"""
+    ModuleCompiler(file).display()
+
+def compile(file, verbose=False):
+    """Parse a module, then compile to bytecode"""
+    module = ModuleCompiler(file)
+    module.writepyc(verbose=verbose)
+
+def transform(specfile, path, verbose=False):
+    """Parse a module, then transform and compile to bytecode"""
+    path = os.path.abspath(path)
+    m = ModuleCompiler(specfile)
+    worklist = m.load_spec(specfile)
+    
+    files = [path]
+    if not os.path.isfile(path):
+        files = m.find_modules(path)
+
+    # collect names in all the prospective modules
+    modules = []
+    namelist = set()
+    for f in files:
+        m = ModuleCompiler(f, basepath=path)
+        modules.append(m)
+        namelist.union(m.find_names())
+    # mangle module names in advices to avoid nameclashes with existing names
+    worklist.mangle_modulenames(list(namelist))
+
+    for m in modules:
+        if m.transform(worklist):
+            m.writepyc(verbose=verbose)
+
+
+if __name__ == '__main__':
+    from optparse import OptionParser
+    usage = "%s -t spec.py ( module.py | path/ )" % sys.argv[0]
+    parser = OptionParser(usage=usage)
+    parser.add_option("-s", "--show",
+                  help="show parse tree", metavar="module")
+    parser.add_option("-c", "--compile",
+                  help="compile module", metavar="module")
+    parser.add_option("-t", "--transform",
+                  help="transform files based on spec", metavar="specfile path")
+    parser.add_option("-v", "--verbose", action="store_true",
+                  help="show parse tree after transformation")
+    (options, args) = parser.parse_args()
+
+    if options.show:
+        display(options.show)
+    elif options.compile:
+        compile(options.compile, verbose=options.verbose)
+    elif options.transform:
+        try:
+            transform(options.transform, args[0], verbose=options.verbose)
+        except IndexError:
+            parser.print_help()
+    else:
+        parser.print_help()

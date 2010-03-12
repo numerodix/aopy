@@ -1,0 +1,38 @@
+This directory contains a test suite. Run the suite with
+
+$ ./runtests . (-v or -vv for more output)
+
+
+Each subdir test_* must contain a file spec.py that is presumed to be the
+specification file.
+
+Tests can also be run individually from inside their directories, like so:
+
+$ ../../aopyc -t spec.py .
+$ python module.pyc
+
+
+Each module to be tested must include a testspec somewhere in the module,
+listing its correct output, like so:
+
+### TESTSPEC ###
+"""
+Function name: compute
+Function doc: Compute fun exponents
+Function module: __main__
+Function dict: {}
+Received arguments: (4,) {}
+Returning result: 256
+256
+"""
+
+If executing the module after compilation produces the same output, the
+test passes.
+
+
+By convention, the injected statements are shown as comments:
+
+# This shows an injected statement as a result of instrumentation.
+
+## This shows the further programmatic injection contained in the aspect
+## (generally a metaclass doing monkey patching)
